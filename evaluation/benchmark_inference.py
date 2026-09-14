@@ -1,15 +1,48 @@
+"""Phase 4: latency/throughput benchmark -- PyTorch vs ONNX Runtime (CUDA EP)
+vs ONNX Runtime + TensorRT EP (FP16).
+
+Model selection per runtime (discovered by running, not guessing):
+- PyTorch:      HF model directly (baseline).
+- ONNX Runtime: models/onnx_model/wav2vec2_hindi_optimized.onnx (graph
+                optimizations + CUDA EP; contrib ops are fine for ORT).
+- TensorRT EP:  models/onnx_model/wav2vec2_hindi_trt.onnx (static [1, 32000]
+                input + embedded shape info; TRT needs both, and cannot parse
+                the com.microsoft contrib ops in the optimized graph).
+
+trt_bootstrap.setup() must run before any InferenceSession or the TRT EP
+silently falls back (missing nvinfer_10.dll on Windows).
+"""
+import os
+import statistics
+import sys
 import time
-import torch
-import torchaudio
-import onnxruntime as ort
-from transformers import Wav2Vec2Processor, Wav2Vec2ForCTC
+
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_PROJECT = os.path.dirname(_HERE)
+_ONNX_OPT_DIR = os.path.join(_PROJECT, "onnx_optimization")
+sys.path.insert(0, _ONNX_OPT_DIR)
+
+import trt_bootstrap  # noqa: E402
+
+trt_bootstrap.setup()
+
+import onnxruntime as ort  # noqa: E402
+import torch  # noqa: E402
+import torchaudio  # noqa: E402
+from transformers import Wav2Vec2ForCTC, Wav2Vec2Processor  # noqa: E402
 
 MODEL_NAME = "Harveenchadha/vakyansh-wav2vec2-hindi-him-4200"
-ONNX_PATH = "models/onnx_model/wav2vec2_hindi_optimized.onnx"
-AUDIO_PATH = "data/sample_hindi.wav"
+ONNX_OPTIMIZED = os.path.join(
+    _PROJECT, "models", "onnx_model", "wav2vec2_hindi_optimized.onnx"
+)
+ONNX_TRT = os.path.join(_PROJECT, "models", "onnx_model", "wav2vec2_hindi_trt.onnx")
+AUDIO_PATH = os.path.join(_PROJECT, "data", "sample_hindi.wav")
+TRT_CACHE = os.path.join(_ONNX_OPT_DIR, "trt_cache")
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-RUNS = 10
+WARMUP = 10
+RUNS = 50
+
 
 def load_audio():
     waveform, sr = torchaudio.load(AUDIO_PATH)
@@ -18,13 +51,32 @@ def load_audio():
         waveform = waveform.mean(dim=0, keepdim=True)
 
     if sr != 16000:
-        resampler = torchaudio.transforms.Resample(sr, 16000)
-        waveform = resampler(waveform)
+        waveform = torchaudio.transforms.Resample(sr, 16000)(waveform)
 
     return waveform.squeeze()
 
-def benchmark_pytorch(waveform):
-    processor = Wav2Vec2Processor.from_pretrained(MODEL_NAME)
+
+def timed(fn, feed) -> dict:
+    for _ in range(WARMUP):
+        fn(feed)
+
+    lat = []
+    for _ in range(RUNS):
+        t = time.perf_counter()
+        fn(feed)
+        lat.append(time.perf_counter() - t)
+
+    lat.sort()
+    mean = statistics.mean(lat)
+    return {
+        "mean": mean,
+        "median": statistics.median(lat),
+        "p95": lat[max(int(len(lat) * 0.95) - 1, 0)],
+        "min": lat[0],
+    }
+
+
+def benchmark_pytorch(waveform, processor):
     model = Wav2Vec2ForCTC.from_pretrained(MODEL_NAME)
     if DEVICE == "cuda":
         model = model.cuda()  # type: ignore
@@ -38,68 +90,94 @@ def benchmark_pytorch(waveform):
     )
     input_values = inputs.input_values.to(DEVICE)
 
-    # warmup
     with torch.no_grad():
-        model(input_values)
+        stats = timed(lambda _: model(input_values), None)
 
-    start = time.time()
-    with torch.no_grad():
-        for _ in range(RUNS):
-            model(input_values)
-    end = time.time()
+    del model, input_values
+    if DEVICE == "cuda":
+        torch.cuda.empty_cache()
+    return stats
 
-    return (end - start) / RUNS
 
-def benchmark_onnx(providers):
-    processor = Wav2Vec2Processor.from_pretrained(MODEL_NAME)
-    waveform = load_audio()
-
+def benchmark_ort(waveform, processor, model_path, providers):
     inputs = processor(
         waveform,
         sampling_rate=16000,  # type: ignore[call-arg]
         return_tensors="np",  # type: ignore[call-arg]
         padding=True  # type: ignore[call-arg]
     )
+    feed = {"input_values": inputs["input_values"]}
 
-    session = ort.InferenceSession(ONNX_PATH, providers=providers)
+    session = ort.InferenceSession(model_path, providers=providers)
+    stats = timed(lambda f: session.run(None, f), feed)
 
-    # warmup
-    session.run(None, {"input_values": inputs["input_values"]})
+    del session
+    if DEVICE == "cuda":
+        torch.cuda.empty_cache()
+    return stats
 
-    start = time.time()
-    for _ in range(RUNS):
-        session.run(None, {"input_values": inputs["input_values"]})
-    end = time.time()
-
-    return (end - start) / RUNS
 
 def main():
+    processor = Wav2Vec2Processor.from_pretrained(MODEL_NAME)
     waveform = load_audio()
 
-    pt_latency = benchmark_pytorch(waveform)
-    onnx_latency = benchmark_onnx(
-        ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    print(f"device: {DEVICE}, runs: {RUNS}, audio: 2.0 s (32000 frames)\n")
+
+    print("benchmarking PyTorch...")
+    pt = benchmark_pytorch(waveform, processor)
+
+    print("benchmarking ONNX Runtime (CUDA EP, optimized model)...")
+    onnx = benchmark_ort(
+        waveform, processor, ONNX_OPTIMIZED, ["CUDAExecutionProvider"]
     )
-    trt_latency = benchmark_onnx(
+
+    print("benchmarking ONNX Runtime + TensorRT EP (FP16, static model)...")
+    trt = benchmark_ort(
+        waveform,
+        processor,
+        ONNX_TRT,
         [
             (
                 "TensorrtExecutionProvider",
-                {"trt_fp16_enable": True}
+                {
+                    "device_id": 0,
+                    "trt_fp16_enable": True,
+                    "trt_engine_cache_enable": True,
+                    "trt_engine_cache_path": TRT_CACHE,
+                },
             ),
             "CUDAExecutionProvider",
-            "CPUExecutionProvider"
-        ]
+            "CPUExecutionProvider",
+        ],
     )
 
-    print("=== Average Latency (seconds) ===")
-    print(f"PyTorch: {pt_latency:.4f}")
-    print(f"ONNX Runtime: {onnx_latency:.4f}")
-    print(f"ONNX Runtime + TensorRT EP (attempt): {trt_latency:.4f}")
+    rows = [
+        ("PyTorch (baseline)", pt),
+        ("ONNX Runtime (CUDA EP)", onnx),
+        ("ONNX Runtime + TRT EP (FP16)", trt),
+    ]
 
-    print("\n=== Throughput (samples/sec) ===")
-    print(f"PyTorch: {1/pt_latency:.2f}")
-    print(f"ONNX Runtime: {1/onnx_latency:.2f}")
-    print(f"ONNX + TensorRT EP: {1/trt_latency:.2f}")
+    print("\n=== Average latency (ms), 2.0 s audio, batch=1 ===")
+    print(f"{'runtime':<32}{'mean':>9}{'median':>9}{'p95':>9}{'min':>9}")
+    for name, s in rows:
+        print(
+            f"{name:<32}{s['mean'] * 1000:>9.1f}{s['median'] * 1000:>9.1f}"
+            f"{s['p95'] * 1000:>9.1f}{s['min'] * 1000:>9.1f}"
+        )
+
+    print("\n=== Throughput (inferences/s) ===")
+    for name, s in rows:
+        print(f"{name:<32}{1 / s['mean']:>8.2f}")
+
+    print("\n=== Real-time factor (audio-sec processed per wall-sec) ===")
+    for name, s in rows:
+        print(f"{name:<32}{2.0 / s['mean']:>8.1f}x")
+
+    fastest = min(s["mean"] for _, s in rows)
+    print("\n=== Speedup vs PyTorch baseline ===")
+    for name, s in rows:
+        print(f"{name:<32}{pt['mean'] / s['mean']:>8.2f}x  (vs fastest: {fastest / s['mean']:.2f}x)")
+
 
 if __name__ == "__main__":
     main()

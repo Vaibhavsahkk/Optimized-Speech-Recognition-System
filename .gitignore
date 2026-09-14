@@ -29,6 +29,9 @@ __pycache__/
 *.bin
 *.safetensors
 *.wav
+trt_cache/
+tensorrt_libs/
+plan.json
 
 # Assignment and private supporting documents
 *.pdf

@@ -18,7 +18,7 @@ For production deployment, the system is designed to run on Linux using Dockeriz
 
 ### Pull Triton Server Image
 ```bash
-docker pull nvcr.io/nvidia/tritonserver:23.10-py3
+docker pull nvcr.io/nvidia/tritonserver:25.03-py3
 ```
 
 ### Run Triton Server
@@ -26,7 +26,7 @@ docker pull nvcr.io/nvidia/tritonserver:23.10-py3
 docker run --gpus all --rm \
   -p 8000:8000 -p 8001:8001 -p 8002:8002 \
   -v $(pwd)/model_repository:/models \
-  nvcr.io/nvidia/tritonserver:23.10-py3 \
+  nvcr.io/nvidia/tritonserver:25.03-py3 \
   tritonserver --model-repository=/models
 ```
 
@@ -76,9 +76,33 @@ model-analyzer profile \
 ---
 
 ## Windows Development Note
-Windows was used for development and validation.
-Production inference is explicitly designed for Linux/Docker,
-which reflects real-world MLOps practices.
+Windows was used for development, validation, and benchmarking — including a
+**verified working TensorRT EP FP16 path** (see `onnx_optimization/` and the
+README benchmark table: 3.10× vs PyTorch, 100% argmax agreement). Triton Server
+**was also verified live on this Windows dev box** via Docker Desktop WSL2 GPU
+passthrough (image `25.03-py3`, model READY on GPU, HTTP serving benchmark:
+15.0 ms mean / 66.6 inf/s for 2 s audio, batch 1 — see
+`triton/bench_serving.py`). For production, the Linux deployment below remains
+the recommended path.
+
+---
+
+## Verified Local Serving Run (Windows, WSL2 GPU passthrough)
+
+```powershell
+docker run -d --name triton_wav2vec2 --gpus all `
+  -p 8000:8000 -p 8001:8001 -p 8002:8002 `
+  -v "${PWD}\triton\model_repository:/models" `
+  nvcr.io/nvidia/tritonserver:25.03-py3 `
+  tritonserver --model-repository=/models
+
+# then from triton/:
+#   python client_infer.py     # transcription over HTTP
+#   python bench_serving.py     # end-to-end HTTP latency benchmark
+```
+
+Observed: model READY on GPU device 0 in ~6 s; live HTTP inference verified
+(identical transcription to local runs); 15.0 ms mean / 13.9 ms p95 over HTTP.
 
 ---
 

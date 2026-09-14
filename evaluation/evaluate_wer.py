@@ -1,19 +1,39 @@
-import torch
-import torchaudio
-import onnxruntime as ort
-import numpy as np
-from transformers import Wav2Vec2Processor, Wav2Vec2ForCTC
-import jiwer
+"""Phase 5: WER evaluation (greedy CTC decoding) -- PyTorch vs ONNX Runtime.
+
+The DLL bootstrap is REQUIRED before creating any InferenceSession, or the
+CUDA EP silently falls back to CPU on this Windows dev box.
+
+Dataset note: Common Voice Hindi requires gated HF access (HF_TOKEN), so the
+evaluation uses the synthetic sample audio; the earlier assumption WER=1.0
+for sine-wave audio is confirmed empirically below. Numerical accuracy
+preservation is separately validated in validate_onnx.py / validate_trt.py.
+"""
 import os
+import sys
+
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_PROJECT = os.path.dirname(_HERE)
+sys.path.insert(0, os.path.join(_PROJECT, "onnx_optimization"))
+
+import trt_bootstrap  # noqa: E402
+
+trt_bootstrap.setup(verbose=False)
+
+import jiwer  # noqa: E402
+import numpy as np  # noqa: E402
+import onnxruntime as ort  # noqa: E402
+import torch  # noqa: E402
+import torchaudio  # noqa: E402
+from transformers import Wav2Vec2Processor, Wav2Vec2ForCTC  # noqa: E402
 
 MODEL_NAME = "Harveenchadha/vakyansh-wav2vec2-hindi-him-4200"
-ONNX_PATH = "models/onnx_model/wav2vec2_hindi_optimized.onnx"
+ONNX_PATH = os.path.join(_PROJECT, "models", "onnx_model", "wav2vec2_hindi_optimized.onnx")
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 # Use synthetic test data for WER evaluation
 TEST_SAMPLES = [
-    ("नमस्ते", "data/sample_hindi.wav"),  # Sample audio files
+    ("नमस्ते", os.path.join(_PROJECT, "data", "sample_hindi.wav")),  # Sample audio files
 ]
 
 def load_audio(path):
