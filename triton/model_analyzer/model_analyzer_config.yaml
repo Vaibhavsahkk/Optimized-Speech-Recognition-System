@@ -1,0 +1,15 @@
+model_repository: ./model_repository
+profile_models:
+  - wav2vec2_hindi
+
+run_config_search_mode: brute
+
+perf_analyzer_flags:
+  concurrency-range: 1:4
+  batch-size: 1,4,8
+  measurement-interval: 5000
+  measurement-request-count: 100
+
+triton_launch_mode: local
+
+output_model_repository_path: ./model_analyzer_output

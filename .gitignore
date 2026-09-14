@@ -1,0 +1,39 @@
+# Local Python environments
+.venv/
+venv/
+env310/
+__pycache__/
+*.py[cod]
+
+# Local tooling and agent metadata
+.skillbrain/
+.vscode/
+
+# Credentials and local configuration
+.env
+.env.*
+!.env.example
+
+# Generated logs, reports, and profiler output
+*.log
+*.err
+*_output.txt
+*_stderr.txt
+**/model_analyzer_output/
+
+# Large generated model and media artifacts
+*.onnx*
+*.onnx.data
+*.pt
+*.pth
+*.bin
+*.safetensors
+*.wav
+
+# Assignment and private supporting documents
+*.pdf
+ARCHITECTURE.md
+FINAL_CHECKLIST.md
+FUTURE_AND_HOSTING.md
+INTERVIEW_SCRIPT.md
+RESUME_PROJECT.md

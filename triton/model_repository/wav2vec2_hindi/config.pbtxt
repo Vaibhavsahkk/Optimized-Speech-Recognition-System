@@ -1,0 +1,32 @@
+name: "wav2vec2_hindi"
+platform: "onnxruntime_onnx"
+
+max_batch_size: 8
+
+input [
+  {
+    name: "input_values"
+    data_type: TYPE_FP32
+    dims: [ -1 ]
+  }
+]
+
+output [
+  {
+    name: "logits"
+    data_type: TYPE_FP32
+    dims: [ -1, 67 ]
+  }
+]
+
+instance_group [
+  {
+    kind: KIND_GPU
+    count: 1
+  }
+]
+
+dynamic_batching {
+  preferred_batch_size: [ 1, 4, 8 ]
+  max_queue_delay_microseconds: 100
+}
