@@ -1,4 +1,4 @@
-"""Phase 2.2: numerical validation -- ONNX Runtime vs PyTorch logits.
+"""Numerical validation -- ONNX Runtime vs PyTorch logits.
 
 The DLL bootstrap (torch first, then cu12 wheels) is REQUIRED before creating
 any InferenceSession, or the CUDA EP silently falls back to CPU on this Windows

@@ -50,7 +50,7 @@ def run_inference(processor, model, waveform):
 if __name__ == "__main__":
     print("Device:", DEVICE)
 
-    # 🔹 Provide path to a single Hindi WAV file (16k or any rate)
+    # Provide path to a single Hindi WAV file (16k or any rate)
     AUDIO_PATH = "data/sample_hindi.wav"
 
     processor, model = load_model()

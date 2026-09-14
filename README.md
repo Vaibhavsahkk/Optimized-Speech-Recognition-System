@@ -47,7 +47,8 @@ Running the scripts regenerates every artifact locally.
 ## Repository Layout
 
 The repository is organized by pipeline stage. Each directory contains the
-script for one stage together with a captured output file for that stage.
+scripts for that stage; generated artifacts and captured logs are
+intentionally not committed.
 
 ```
 data/                       Synthetic 2 s 16 kHz test signal generation
@@ -82,7 +83,6 @@ evaluation/
     evaluate_wer.py             Word error rate evaluation
 ```
 
-
 ## Pipeline
 
 ### Profiling
@@ -92,8 +92,7 @@ the torch profiler, recording CPU and CUDA activity with shapes and
 memory. The recorded profile shows inference cost concentrated in the
 transformer encoder matrix multiplications and the convolutional feature
 extractor, which establishes the optimization targets for the ONNX and
-TensorRT work. `profiling/profiler_output.txt` contains the captured
-profile table.
+TensorRT work. The script prints the profile table sorted by CUDA time.
 
 ### ONNX Export
 
@@ -123,6 +122,11 @@ implement. `onnx_optimization/make_trt_ready_model.py` therefore builds
 fixes the input to a static `[1, 32000]` shape for the 2 second test signal
 and runs ONNX Runtime symbolic shape inference to embed tensor shapes in
 the graph. The fully static, fully standard domain graph allows the
+TensorRT execution provider to partition and offload the encoder without
+fragmenting it into fallback regions, under a single engine profile
+configuration. The repository therefore maintains two intentionally
+distinct artifacts: one optimized for ONNX Runtime and Triton serving, and
+one for TensorRT execution.
 
 ### Windows DLL Bootstrap
 
@@ -159,8 +163,6 @@ runs on the same signal: 4.4 ms mean, 4.6 ms P95, 228.5 inf/s, 457x
 realtime, with a warm engine cache load of 0.12 s from a 202.9 MB cache.
 FP16 execution was confirmed active from the session provider list and
 from the TensorRT engine cache being populated.
-
-TensorRT execution provider to partition and offload the encoder without
 
 ## Accuracy
 
@@ -217,6 +219,11 @@ server request handling, which is the honest accounting for an end to
 end served request on this hardware.
 
 `triton/PRODUCTION_DEPLOYMENT.md` documents the production deployment:
+Ubuntu with Docker and the NVIDIA Container Toolkit, the server container,
+and the model analyzer configuration for batch size and concurrency
+sweeping. Production deployment targets Linux because Triton Server is
+distributed as a Linux container; development, validation, and the serving
+verification above were completed on Windows.
 
 ## Reproduction
 
@@ -259,6 +266,21 @@ docker run -d --name triton_wav2vec2 --gpus all `
   -p 8000:8000 -p 8001:8001 -p 8002:8002 `
   -v "<repo path>\triton\model_repository:/models" `
   nvcr.io/nvidia/tritonserver:25.03-py3 `
+  tritonserver --model-repository=/models
+python triton\client_infer.py
+python triton\bench_serving.py
+```
+
+The ONNX artifacts are placed under `models/onnx_model/` and the Triton
+model repository is `triton/model_repository/wav2vec2_hindi/1/model.onnx`,
+a copy of the optimized graph. After regenerating models, copy the
+optimized artifact into the repository directory before starting Triton.
+
+On Linux the same commands apply with forward slashes. The DLL bootstrap
+modules are Windows specific; on Linux the CUDA and TensorRT providers
+resolve through the standard dynamic loader and the bootstrap calls
+require no special handling, but scripts were executed and verified on
+Windows and the numbers in this document are the Windows numbers.
 
 ## Results Summary
 
@@ -295,30 +317,3 @@ Hugging Face artifact trained within the AI4Bharat effort and released
 under its own license terms; verify the model card before commercial
 use. This repository contains the optimization and serving pipeline
 code and carries no model weights.
-
-  tritonserver --model-repository=/models
-python triton\client_infer.py
-python triton\bench_serving.py
-```
-
-The ONNX artifacts are placed under `models/onnx_model/` and the Triton
-model repository is `triton/model_repository/wav2vec2_hindi/1/model.onnx`,
-a copy of the optimized graph. After regenerating models, copy the
-optimized artifact into the repository directory before starting Triton.
-
-On Linux the same commands apply with forward slashes. The DLL bootstrap
-modules are Windows specific; on Linux the CUDA and TensorRT providers
-resolve through the standard dynamic loader and the bootstrap calls
-require no special handling, but scripts were executed and verified on
-Windows and the numbers in this document are the Windows numbers.
-
-Ubuntu with Docker and the NVIDIA Container Toolkit, the server container,
-and the model analyzer configuration for batch size and concurrency
-sweeping. Production deployment targets Linux because Triton Server is
-distributed as a Linux container; development, validation, and the
-serving verification above were completed on Windows.
-
-
-engine profile configuration. The repository therefore maintains two
-intentionally distinct artifacts: one optimized for ONNX Runtime and Triton
-serving, and one for TensorRT execution.

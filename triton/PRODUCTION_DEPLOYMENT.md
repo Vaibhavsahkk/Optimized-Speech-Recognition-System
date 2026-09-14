@@ -1,4 +1,4 @@
-# Production Deployment Plan — Triton Inference Server
+# Production Deployment Plan - Triton Inference Server
 
 ## Overview
 Local development was performed on Windows using ONNX Runtime and TensorRT Execution Provider.
@@ -35,10 +35,10 @@ The model repository follows Triton conventions:
 
 ```
 model_repository/
-└── wav2vec2_hindi/
-    ├── config.pbtxt
-    └── 1/
-        └── model.onnx
+  wav2vec2_hindi/
+    config.pbtxt
+    1/
+      model.onnx
 ```
 
 ---
@@ -76,12 +76,12 @@ model-analyzer profile \
 ---
 
 ## Windows Development Note
-Windows was used for development, validation, and benchmarking — including a
+Windows was used for development, validation, and benchmarking - including a
 **verified working TensorRT EP FP16 path** (see `onnx_optimization/` and the
-README benchmark table: 3.10× vs PyTorch, 100% argmax agreement). Triton Server
+README benchmark table: 2.97x vs PyTorch, 100% argmax agreement). Triton Server
 **was also verified live on this Windows dev box** via Docker Desktop WSL2 GPU
 passthrough (image `25.03-py3`, model READY on GPU, HTTP serving benchmark:
-15.0 ms mean / 66.6 inf/s for 2 s audio, batch 1 — see
+13.6 ms mean / 73.4 inf/s for 2 s audio, batch 1 - see
 `triton/bench_serving.py`). For production, the Linux deployment below remains
 the recommended path.
 
@@ -102,12 +102,12 @@ docker run -d --name triton_wav2vec2 --gpus all `
 ```
 
 Observed: model READY on GPU device 0 in ~6 s; live HTTP inference verified
-(identical transcription to local runs); 15.0 ms mean / 13.9 ms p95 over HTTP.
+(identical transcription to local runs); 13.6 ms mean / 14.8 ms p95 over HTTP.
 
 ---
 
-## Interview Points
-**Key Explanation:**
+## Deployment Rationale
+**Summary:**
 > "Development and validation were done on Windows. Production deployment is designed for Linux using Dockerized Triton Server, which provides stable TensorRT acceleration, Model Analyzer support, and scalable inference."
 
 **Technical Justification:**

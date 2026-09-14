@@ -1,4 +1,4 @@
-﻿"""Windows DLL bootstrap for TensorRT 10 + ONNX Runtime GPU + PyTorch.
+"""Windows DLL bootstrap for TensorRT 10 + ONNX Runtime GPU + PyTorch.
 
 Why this exists (all discovered by running, not guessing):
 

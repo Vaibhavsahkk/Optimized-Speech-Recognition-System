@@ -1,7 +1,5 @@
 """FP16 TensorRT EP benchmark on the static-shape TRT-ready model.
 
-Pipeline position: Phase 3/4 deliverable (FP16 TRT inference + latency stats).
-
 Why this file looks the way it does (all discovered by running, not guessing):
 1. trt_bootstrap.setup() must run BEFORE creating the InferenceSession, or
    nvinfer_10.dll fails to load on Windows (Error 126) and ORT silently falls

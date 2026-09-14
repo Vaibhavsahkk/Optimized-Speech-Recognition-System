@@ -1,7 +1,7 @@
-"""Phase 5 (accuracy): compare FP16 TensorRT EP logits against the PyTorch
+"""Accuracy check: compare FP16 TensorRT EP logits against the PyTorch
 FP32 baseline on data/sample_hindi.wav.
 
-Why: the assignment requires benchmarking performance VS ACCURACY. FP16
+Why: performance must be weighed against accuracy. FP16
 execution trades some numeric precision for the 3.1x speedup, so we verify
 the greedy CTC decoding is unchanged and quantify the logit deviation.
 

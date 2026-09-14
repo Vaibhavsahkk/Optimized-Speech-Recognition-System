@@ -1,4 +1,4 @@
-"""Phase 5: WER evaluation (greedy CTC decoding) -- PyTorch vs ONNX Runtime.
+"""WER evaluation (greedy CTC decoding) -- PyTorch vs ONNX Runtime.
 
 The DLL bootstrap is REQUIRED before creating any InferenceSession, or the
 CUDA EP silently falls back to CPU on this Windows dev box.
@@ -125,7 +125,8 @@ def main():
     print(f"PyTorch WER: {wer_pt:.4f}")
     print(f"ONNX WER:    {wer_onnx:.4f}")
     print("\nNote: WER=1.0 expected for synthetic audio (no real Hindi speech)")
-    print("Interview point: Accuracy preservation validated in Phase 2.2 (numerical output comparison)")
+    print("Accuracy preservation is validated separately by the numerical")
+    print("comparisons in evaluation/validate_onnx.py and onnx_optimization/validate_trt.py.")
 
 if __name__ == "__main__":
     main()

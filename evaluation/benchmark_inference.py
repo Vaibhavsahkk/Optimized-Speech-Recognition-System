@@ -1,4 +1,4 @@
-"""Phase 4: latency/throughput benchmark -- PyTorch vs ONNX Runtime (CUDA EP)
+"""Latency/throughput benchmark -- PyTorch vs ONNX Runtime (CUDA EP)
 vs ONNX Runtime + TensorRT EP (FP16).
 
 Model selection per runtime (discovered by running, not guessing):

@@ -33,10 +33,7 @@ trt_cache/
 tensorrt_libs/
 plan.json
 
-# Assignment and private supporting documents
+# Private local documents (not published)
 *.pdf
-ARCHITECTURE.md
-FINAL_CHECKLIST.md
-FUTURE_AND_HOSTING.md
-INTERVIEW_SCRIPT.md
-RESUME_PROJECT.md
+/*.md
+!/README.md
